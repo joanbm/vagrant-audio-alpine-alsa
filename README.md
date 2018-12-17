@@ -1,8 +1,11 @@
-vagrant-audio
-=============
+vagrant-audio-alpine-alsa
+=========================
 
-A minimal Vagrantfile that makes sound work on Mac (host) and Ubuntu/Precise (guest).
-Uses the OSS sound driver system (I could not get ALSA to work), and verified with Mac 10.8.3, VirtualBox 4.2.12
+A minimal Vagrantfile that makes sound work on an Alpine Linux (guest).
+
+Roughly based on [GeoffreyPlitt/vagrant-audio](https://github.com/GeoffreyPlitt/vagrant-audio).
+
+Uses the ALSA sound driver system, and verified with Arch Linux (updated, 2018-12-17), VirtualBox 5.2.22.
 
 - Do "vagrant up" to start everthing, then "vagrant ssh" to login to the VM.
-- Do "osstest" and you should hear sound.
+- Do "alsabat-test.sh" and you should hear sound.

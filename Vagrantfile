@@ -1,16 +1,15 @@
 Vagrant.configure("2") do |config|
-  config.ssh.forward_x11 = true # useful since some audio testing programs use x11
-  config.vm.box = "precise64"
-  config.vm.box_url = "http://files.vagrantup.com/precise64.box"
+  config.vm.box = "generic/alpine38"
   config.vm.provision :shell, :inline => $BOOTSTRAP_SCRIPT # see below
 
   # enable audio drivers on VM settings
   config.vm.provider :virtualbox do |vb|
     if RUBY_PLATFORM =~ /darwin/
-      vb.customize ["modifyvm", :id, '--audio', 'coreaudio', '--audiocontroller', 'hda'] # choices: hda sb16 ac97
+      vb.customize ["modifyvm", :id, '--audio', 'coreaudio', '--audiocontroller', 'hda', '--audioout', 'on'] # choices: hda sb16 ac97
     elsif RUBY_PLATFORM =~ /mingw|mswin|bccwin|cygwin|emx/
-      vb.customize ["modifyvm", :id, '--audio', 'dsound', '--audiocontroller', 'ac97']
+      vb.customize ["modifyvm", :id, '--audio', 'dsound', '--audiocontroller', 'ac97', '--audioout', 'on']
     end
+    vb.customize ["modifyvm", :id, '--audioout', 'on']
   end
 
 end
@@ -18,25 +17,32 @@ end
 $BOOTSTRAP_SCRIPT = <<EOF
   set -e # Stop on any error
 
-  # --------------- SETTINGS ----------------
-  # Other settings
-  export DEBIAN_FRONTEND=noninteractive
+  # Need to install the linux-vanilla kernel,
+  # because the linux-virt kernel has no sound modules
+  # FIXME: Maybe there's a simple enough way to get it to work with linux-virt...
+  apk del linux-virt
+  apk add linux-firmware-none linux-vanilla
 
-  sudo apt-get update
+  # Install ALSA and enable the service
+  apk add alsa-utils alsa-lib alsaconf
+  rc-update add alsa
 
-  # ---- OSS AUDIO
-  sudo usermod -a -G audio vagrant
-  sudo apt-get install -y oss4-base oss4-dkms oss4-source oss4-gtk linux-headers-3.2.0-23 debconf-utils
-  sudo ln -s /usr/src/linux-headers-$(uname -r)/ /lib/modules/$(uname -r)/source || echo ALREADY SYMLINKED
-  sudo module-assistant prepare
-  sudo module-assistant auto-install -i oss4 # this can take 2 minutes
-  sudo debconf-set-selections <<< "linux-sound-base linux-sound-base/sound_system select  OSS"
-  echo READY.
+  # Add users to ALSA group
+  sed -i -e 's/^audio:x:18:$/audio:x:18:root,vagrant/' /etc/group
 
-  # have to reboot for drivers to kick in, but only the first time of course
-  if [ ! -f ~/runonce ]
+  # Unmute volume mixer on boot
+  echo "#!/bin/sh
+  amixer sset Master unmute
+  amixer sset PCM unmute
+  amixer set Master 100%
+  amixer set PCM 100%" > /root/alsa-unmute-on-boot
+  chmod +x /root/alsa-unmute-on-boot
+  echo "@reboot /root/alsa-unmute-on-boot" > /etc/crontabs/root
+
+  # Have to reboot for drivers to kick in, but only the first time of course
+  if [ ! -f ~/alsa-reboot-runonce ]
   then
+    touch ~/alsa-reboot-runonce
     sudo reboot
-    touch ~/runonce
   fi
 EOF
